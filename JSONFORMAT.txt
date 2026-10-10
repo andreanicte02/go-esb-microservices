@@ -1,7 +1,0 @@
-{
-    "Host": "asfdsf",
-    "Nombre": "string",
-	"Ruta": "string",
-	"Padre": "string",
-	"Method": "string"
-}

@@ -1,4 +1,4 @@
-module github.com/andreanicte02/practica-sa-201404104/tree/practica7/esb
+module github.com/andreanicte02/go-esb-microservices/esb
 
 go 1.15
 

@@ -233,7 +233,7 @@ func avisarPedidoListo(w http.ResponseWriter, r *http.Request)  {
 
 
 }
-//fncion que simula la comunicacion entre el servicio del repartidor y el restaruante
+//fncion que simula la comunicacion entre el servicio del repartidor y el restaurante
 func simulacionEntregaPedidoAlRepartidor(idPedido int){
 
 

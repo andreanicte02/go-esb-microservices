@@ -1,4 +1,4 @@
-module andreanicte02/practica-sa-201404104
+module github.com/andreanicte02/go-esb-microservices/servicio-repartidor
 
 go 1.13
 

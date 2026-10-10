@@ -1,48 +1,45 @@
-version: '3'
-
+# Los nombres de los servicios (esb, cliente, restaurante, repartidor) son
+# tambien los hostnames que el codigo Go usa para resolverse entre si
+# (ver getService en esb/main.go). No renombrarlos sin ajustar ese mapeo.
 services:
 
   esb:
     build: esb/.
     ports:
-        - 8085:8085
+      - 8085:8085
     networks:
-      service_network:
-
+      - service_network
 
   cliente:
-    build: serivicio-cliente/.
+    build: servicio-cliente/.
     ports:
       - 8080:8080
     networks:
-      service_network:
+      - service_network
     depends_on:
       - esb
+    restart: on-failure
+
+  restaurante:
+    build: servicio-restaurante/.
+    ports:
+      - 8081:8081
+    networks:
+      - service_network
+    depends_on:
+      - esb
+    restart: on-failure
 
   repartidor:
     build: servicio-repartidor/.
     ports:
       - 8082:8082
     networks:
-        service_network:
+      - service_network
     depends_on:
       - esb
-
-
-  restaurante:
-    build: servicio-restaruante/.
-    ports:
-      - 8081:8081
-    networks:
-      service_network:
-    depends_on:
-      - esb
-
+    restart: on-failure
 
 networks:
-    service_network:
-        driver: bridge
-
-    default:
-      external:
-        name: service_network
+  service_network:
+    driver: bridge

@@ -43,3 +43,20 @@
 # *.ipr
 
 .scannerwork/*
+### Go ###
+# Binarios compilados: se generan con `go build`, no se versionan
+esb/esb
+servicio-cliente/servicio-cliente
+servicio-restaurante/servicio-restaurante
+servicio-repartidor/servicio-repartidor
+
+# Reportes de cobertura
+coverage
+coverage.out
+converage
+
+### macOS ###
+.DS_Store
+
+### JetBrains ###
+.idea/
