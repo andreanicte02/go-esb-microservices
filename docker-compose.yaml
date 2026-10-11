@@ -1,45 +1,24 @@
-# Los nombres de los servicios (esb, cliente, restaurante, repartidor) son
-# tambien los hostnames que el codigo Go usa para resolverse entre si
-# (ver getService en esb/main.go). No renombrarlos sin ajustar ese mapeo.
+# Los nombres de los servicios (esb, cliente, restaurante, repartidor) son tambien
+# los hostnames con los que se encuentran entre si (ESB_URL y SERVICE_URL tienen
+# esos valores por defecto). En Kubernetes son los nombres de los Services.
 services:
 
   esb:
-    build: esb/.
+    build: { context: ., dockerfile: esb/Dockerfile }
     ports:
       - 8085:8085
-    networks:
-      - service_network
 
   cliente:
-    build: servicio-cliente/.
+    build: { context: ., dockerfile: servicio-cliente/Dockerfile }
     ports:
       - 8080:8080
-    networks:
-      - service_network
-    depends_on:
-      - esb
-    restart: on-failure
 
   restaurante:
-    build: servicio-restaurante/.
+    build: { context: ., dockerfile: servicio-restaurante/Dockerfile }
     ports:
       - 8081:8081
-    networks:
-      - service_network
-    depends_on:
-      - esb
-    restart: on-failure
 
   repartidor:
-    build: servicio-repartidor/.
+    build: { context: ., dockerfile: servicio-repartidor/Dockerfile }
     ports:
       - 8082:8082
-    networks:
-      - service_network
-    depends_on:
-      - esb
-    restart: on-failure
-
-networks:
-  service_network:
-    driver: bridge

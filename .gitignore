@@ -60,3 +60,7 @@ converage
 
 ### JetBrains ###
 .idea/
+
+# e2e report and the assembled site
+build/
+site/

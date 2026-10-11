@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: esb
+  namespace: esb
+  labels: { app: esb }
+spec:
+  # One replica on purpose: the service registry lives in the pod's memory, so two
+  # ESB pods would each know a different subset of services. Scaling it out needs
+  # the registry in shared storage (Redis, etcd...). For the same reason it is
+  # replaced with Recreate rather than running old and new pods side by side.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: esb }
+  template:
+    metadata:
+      labels: { app: esb }
+    spec:
+      containers:
+        - name: esb
+          image: esb-microservices/esb:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8085
+          envFrom:
+            - configMapRef: { name: esb-config }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8085 }
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8085 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 25m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: esb
+  namespace: esb
+spec:
+  type: NodePort
+  selector: { app: esb }
+  ports:
+    - port: 8085
+      targetPort: 8085
+      nodePort: 30085

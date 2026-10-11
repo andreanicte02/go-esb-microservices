@@ -1,0 +1,85 @@
+name: Kubernetes
+
+# Unit tests for every module, then the whole system on a real Kubernetes
+# cluster (kind, inside the runner): an order end to end, and pods deleted on
+# purpose to check it recovers. The report is published to GitHub Pages.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: kubernetes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: go vet + go test -race (every module)
+        run: |
+          for m in comun esb servicio-cliente servicio-restaurante servicio-repartidor; do
+            echo "::group::$m"
+            (cd "$m" && go vet ./... && go test -race ./...) || exit 1
+            echo "::endgroup::"
+          done
+
+  e2e:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: |
+          for s in esb cliente restaurante repartidor; do
+            dir=$([ "$s" = esb ] && echo esb || echo "servicio-$s")
+            docker build -t "esb-microservices/$s:dev" -f "$dir/Dockerfile" .
+          done
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: esb
+          config: k8s/kind.yaml
+
+      - name: Deploy
+        run: |
+          for s in esb cliente restaurante repartidor; do
+            kind load docker-image "esb-microservices/$s:dev" --name esb
+          done
+          kubectl apply -k k8s
+
+      - name: End-to-end test and chaos
+        run: mkdir -p build && python3 tests/e2e.py --reporte build/reporte.json
+
+      - name: Logs if something failed
+        if: failure()
+        run: |
+          kubectl -n esb get pods -o wide
+          for d in esb cliente restaurante repartidor; do echo "::group::$d"; kubectl -n esb logs deploy/$d --tail=100; echo "::endgroup::"; done
+
+      - run: python3 scripts/build_site.py site --reporte build/reporte.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: e2e
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -19,8 +19,8 @@ func TestSuma(t *testing.T) {
 func TestGetDataService(t *testing.T) {
 
 	servicios := []ServicioData{}
-	servicios = append(servicios, ServicioData{"8082", "informar_estado_cliente","/informar_estado_cliente","repartidor","GET"})
-	servicios = append(servicios, ServicioData{"8081", "estado_pedido","/estado_pedido","restaurante","GET"})
+	servicios = append(servicios, ServicioData{"8082", "informar_estado_cliente","/informar_estado_cliente","repartidor","GET",""})
+	servicios = append(servicios, ServicioData{"8081", "estado_pedido","/estado_pedido","restaurante","GET",""})
 
 	_,existe := GetDataService(servicios,"repartidor","informar_estado_cliente")
 

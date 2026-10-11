@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
+	"strconv"
 
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/andreanicte02/go-esb-microservices/comun"
 	"github.com/gorilla/mux"
 	"io"
-	"log"
 	"net/http"
 )
 
@@ -16,112 +17,74 @@ func Suma(numero1, numero2 int) (resultado int) {
 	return
 }
 
-
-
-//struct de un json generico
+// struct de un json generico
 type JSONGenerico struct {
-
 	Id int `json:"id"`
-
 }
-//struct de un mensaje generico
+
+// struct de un mensaje generico
 type JSONMessageGeneric struct {
-
 	Message string `json:"message"`
-	Id      int `json:"id"`
-
+	Id      int    `json:"id"`
 }
 
-//json para enviar la data y registrar los servicios en el ESB
+// json para enviar la data y registrar los servicios en el ESB
 type JSONMessageServices struct {
-
 	Name string
 	Ruta string
-	HOST  int
-
+	HOST int
 }
 
-
-//struct que nos va ayudar a simular los menus en memoria
+// struct que nos va ayudar a simular los menus en memoria
 type Menu struct {
-	Id int
+	Id          int
 	Descripcion string
 }
 
-//struct que nos va ayudar a simular los clientes en memoria
+// struct que nos va ayudar a simular los clientes en memoria
 type Cliente struct {
-	Id int
+	Id     int
 	Nombre string
 }
 
-//struct que va ayudar a almacenar la informacion de pedidos en memoria del restaurante
+// struct que va ayudar a almacenar la informacion de pedidos en memoria del restaurante
 type Pedido struct {
-
-	IdMenu int `json:"idMenu"`
+	IdMenu    int `json:"idMenu"`
 	IdCliente int `json:"idCliente"`
-	IdEstado int `json:"IdEstado"` //0 pendiente 1 completado
-
+	IdEstado  int `json:"IdEstado"` //0 pendiente 1 completado
 
 }
 
-
-//struct que va ayudar a almacenar la informacion de pedidos en memoria del repartidor
+// struct que va ayudar a almacenar la informacion de pedidos en memoria del repartidor
 type PedidoRepartidor struct {
-
-	IdMenu int `json:"idMenu"`
-	IdCliente int `json:"idCliente"`
-	IdEstado int `json:"IdEstado"` //0 pendiente 1 completado
-	DescripcionMenu string `json:"DescripcionMenu"`
-	IdPedido int  `json:"idPedido"`
-	EstadoRepartidor int `json:"estadoRepartidor ya tomo el pedido o no"`
-
-
+	IdMenu           int    `json:"idMenu"`
+	IdCliente        int    `json:"idCliente"`
+	IdEstado         int    `json:"IdEstado"` //0 pendiente 1 completado
+	DescripcionMenu  string `json:"DescripcionMenu"`
+	IdPedido         int    `json:"idPedido"`
+	EstadoRepartidor int    `json:"estadoRepartidor ya tomo el pedido o no"`
 }
-
-
 
 type ServicioData struct {
-
-	Host string
+	Host   string
 	Nombre string
-	Ruta string
-	Padre string
+	Ruta   string
+	Padre  string
 	Method string
-
-
 }
 
-//decodificador
-func Decodificador(body io.ReadCloser, data *JSONMessageGeneric) JSONMessageGeneric  {
-	decoder:= json.NewDecoder(body)
+// decodificador
+func Decodificador(body io.ReadCloser, data *JSONMessageGeneric) JSONMessageGeneric {
+	decoder := json.NewDecoder(body)
 	decoder.Decode(data)
 	return *data
 }
 
+// esbURL is the bus address: the Kubernetes Service name, or the compose hostname.
+var esbURL = comun.Env("ESB_URL", "http://esb:8085")
 
-//funcion para registrar servicios
-func RegistrarServicio(servicio *ServicioData, method string, host string, nameSerivce string){
-
-	dataRequest,_:= json.Marshal(servicio)
-	req,err := http.NewRequest(method, "http://esb:"+host+ nameSerivce, bytes.NewBuffer(dataRequest))
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println("Error on response.\n[ERRO] -", err)
-	}
-
-	defer resp.Body.Close()
-	var data = Decodificador(resp.Body,&JSONMessageGeneric{"",0})
-	fmt.Println("info. recibida")
-	fmt.Println(data)
-
-}
-
-
-var estadoRepartidor int =0 //-1 indica que no tiene pedido pendiente, 0 que esta en caminio y 1 que ya se entrego
-//se isa una hash en el lado del reapartidor para llevarla en memoria
+var estadoRepartidor int = 0 //-1 indica que no tiene pedido pendiente, 0 que esta en caminio y 1 que ya se entrego
+// se isa una hash en el lado del reapartidor para llevarla en memoria
 var hashPedido = make(map[int]*PedidoRepartidor)
 
 /**
@@ -129,19 +92,18 @@ w -> indica el contenido de la respuesta
 r -> indica el contenido de la solicitud
 */
 
+// servicio que recibe el pedido, indica al reapartidor que tiene pedidos que entregar
+// recibe una json con la estrucutra de PedidoRepartidor y actualiza el estado
+func recibirPedido(w http.ResponseWriter, r *http.Request) {
 
-//servicio que recibe el pedido, indica al reapartidor que tiene pedidos que entregar
-//recibe una json con la estrucutra de PedidoRepartidor y actualiza el estado
-func recibirPedido(w http.ResponseWriter, r *http.Request)  {
+	data := PedidoRepartidor{}
 
-	data:= PedidoRepartidor{}
-
-	m:= JSONMessageGeneric{}
-	w.Header().Set("Content-Type","application/json")
+	m := JSONMessageGeneric{}
+	w.Header().Set("Content-Type", "application/json")
 
 	err := json.NewDecoder(r.Body).Decode(&data)
 
-	if err != nil{
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -149,58 +111,57 @@ func recibirPedido(w http.ResponseWriter, r *http.Request)  {
 	if estadoRepartidor == 0 {
 		data.EstadoRepartidor = 1
 	}
-	hashPedido[data.IdPedido]=&data
+	hashPedido[data.IdPedido] = &data
 
-	m.Message =  "pedidio realizado"
+	m.Message = "pedidio realizado"
 	m.Id = data.IdPedido
 	json.NewEncoder(w).Encode(m)
 	fmt.Print("pedido recibida: ")
 	fmt.Println(data)
 
-	if estadoRepartidor == 1{
+	if estadoRepartidor == 1 {
 		return
 	}
 	estadoRepartidor = 1
 }
 
-//Recibe un json generico, con el id del pedido
-//Rregresa el estado del pedido
-func informarEstadoCliente(w http.ResponseWriter, r *http.Request)  {
+// Recibe un json generico, con el id del pedido
+// Rregresa el estado del pedido
+func informarEstadoCliente(w http.ResponseWriter, r *http.Request) {
 
-	data:= JSONGenerico{}
+	data := JSONGenerico{}
 
-	m:= JSONMessageGeneric{}
-	w.Header().Set("Content-Type","application/json")
+	m := JSONMessageGeneric{}
+	w.Header().Set("Content-Type", "application/json")
 
 	err := json.NewDecoder(r.Body).Decode(&data)
 
-	if err != nil{
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	pedido,existePedido := hashPedido[data.Id]
+	pedido, existePedido := hashPedido[data.Id]
 
-	if !existePedido{
-		mensaje_error,_ := json.Marshal(JSONMessageGeneric{"El repartidor sigue en espera del pedido",-1})
+	if !existePedido {
+		mensaje_error, _ := json.Marshal(JSONMessageGeneric{"El repartidor sigue en espera del pedido", -1})
 		http.Error(w, string(mensaje_error), http.StatusBadRequest)
 		fmt.Print("pedido recibida: ")
 		fmt.Println(data)
 		return
 	}
 
-
-	if pedido.EstadoRepartidor == -1{
-		m.Message =" el pedido ya fue entreagado "
+	if pedido.EstadoRepartidor == -1 {
+		m.Message = " el pedido ya fue entreagado "
 	} else if estadoRepartidor == 1 && pedido.EstadoRepartidor == 0 {
-		m.Message="el reapartidor esta ocupado pero no con tu pedido"
+		m.Message = "el reapartidor esta ocupado pero no con tu pedido"
 
-	}else if estadoRepartidor == 1 && pedido.EstadoRepartidor == 1 {
-		m.Message="el repartidor va en camino con tu pedido"
+	} else if estadoRepartidor == 1 && pedido.EstadoRepartidor == 1 {
+		m.Message = "el repartidor va en camino con tu pedido"
 	} else if estadoRepartidor == 0 {
-		m.Message="el reaprtidor no esta ocupado con ningun pedido"
-	} else{
-		m.Message="tu pedido ya fue entregado"
+		m.Message = "el reaprtidor no esta ocupado con ningun pedido"
+	} else {
+		m.Message = "tu pedido ya fue entregado"
 	}
 
 	m.Id = data.Id
@@ -210,63 +171,69 @@ func informarEstadoCliente(w http.ResponseWriter, r *http.Request)  {
 
 }
 
+// Recie un struct de pedidoRepartidor, solo para obtener el id del pedido
+// actualiza el estado del repartidor en relacion con el pedido
+func marcarPedido(w http.ResponseWriter, r *http.Request) {
 
-//Recie un struct de pedidoRepartidor, solo para obtener el id del pedido
-//actualiza el estado del repartidor en relacion con el pedido
-func marcarPedido(w http.ResponseWriter, r *http.Request)  {
-
-	data:= PedidoRepartidor{}
-	m:= JSONMessageGeneric{}
-	w.Header().Set("Content-Type","application/json")
+	data := PedidoRepartidor{}
+	m := JSONMessageGeneric{}
+	w.Header().Set("Content-Type", "application/json")
 
 	err := json.NewDecoder(r.Body).Decode(&data)
 
-	if err != nil{
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	pedido,existePedido := hashPedido[data.IdPedido]
+	pedido, existePedido := hashPedido[data.IdPedido]
 
-	if !existePedido{
-		mensaje_error,_ := json.Marshal(JSONMessageGeneric{"Ese pedido no existe",-1})
+	if !existePedido {
+		mensaje_error, _ := json.Marshal(JSONMessageGeneric{"Ese pedido no existe", -1})
 		http.Error(w, string(mensaje_error), http.StatusBadRequest)
 		fmt.Print("pedido recibida: ")
 		fmt.Println(data)
 		return
 	}
 
-
 	estadoRepartidor = 0
 	pedido.EstadoRepartidor = -1 //pedido entregado
 
 	m.Id = data.IdPedido
-	m.Message = "id pedido: "+ string(m.Id)+ " pedido completado"
+	m.Message = "id pedido: " + strconv.Itoa(m.Id) + " pedido completado"
 	json.NewEncoder(w).Encode(m)
 	fmt.Print("pedido recibida: ")
 	fmt.Println(data)
 
 }
 
-//funcion que expone los servicios del repartidor
-func handle()  {
+// funcion que expone los servicios del repartidor
+func handle(registro *comun.Registro) {
 
 	router := mux.NewRouter()
-	router.HandleFunc("/recibir_pedidio",recibirPedido).Methods("POST")
-	router.HandleFunc("/informar_estado_cliente",informarEstadoCliente).Methods("GET")
-	router.HandleFunc("/marcar_pedido",marcarPedido).Methods("POST")
-	http.ListenAndServe(":8082", router)
+	router.HandleFunc("/healthz", comun.Vivo).Methods("GET")
+	router.HandleFunc("/readyz", registro.ListoHandler).Methods("GET")
+	router.HandleFunc("/recibir_pedidio", recibirPedido).Methods("POST")
+	router.HandleFunc("/informar_estado_cliente", informarEstadoCliente).Methods("GET")
+	router.HandleFunc("/marcar_pedido", marcarPedido).Methods("POST")
+	srv := comun.NuevoServidor(":8082", router)
+	registro.Drenando = srv.Drenando
+	srv.Correr()
 
 }
 
-func main (){
-
-	RegistrarServicio(&ServicioData{"8082", "recibir_pedidio","/recibir_pedidio","repartidor","POST"}, "POST","8085","/registrar_microservicio")
-	RegistrarServicio(&ServicioData{"8082", "informar_estado_cliente","/informar_estado_cliente","repartidor","GET"}, "POST","8085","/registrar_microservicio")
-	RegistrarServicio(&ServicioData{"8082", "marcar_pedido","/marcar_pedido","repartidor","POST"}, "POST","8085","/registrar_microservicio")
+func main() {
+	// Registers in the background and keeps re-registering, so the service
+	// survives the ESB starting late or restarting (see comun/registro.go).
+	registro := comun.NuevoRegistro("repartidor", "8082",
+		comun.Operacion{Nombre: "recibir_pedidio", Ruta: "/recibir_pedidio", Method: "POST"},
+		comun.Operacion{Nombre: "informar_estado_cliente", Ruta: "/informar_estado_cliente", Method: "GET"},
+		comun.Operacion{Nombre: "marcar_pedido", Ruta: "/marcar_pedido", Method: "POST"},
+	)
+	registro.Iniciar(context.Background())
 
 	println("escuchando el puerto 8082")
-	Suma(1,2)
-	handle()
+	Suma(1, 2)
+	handle(registro)
 
 }
