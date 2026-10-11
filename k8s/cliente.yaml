@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cliente
+  namespace: esb
+  labels: { app: cliente }
+spec:
+  # One replica: orders are kept in memory, so a second pod would not see them.
+  replicas: 1
+  selector:
+    matchLabels: { app: cliente }
+  template:
+    metadata:
+      labels: { app: cliente }
+    spec:
+      containers:
+        - name: cliente
+          image: esb-microservices/cliente:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef: { name: esb-config }
+          env:
+            - name: SERVICE_URL # what the ESB calls: this Service's DNS name
+              value: http://cliente:8080
+          # Ready only once the ESB has accepted our routes (see comun/registro.go).
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 25m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cliente
+  namespace: esb
+spec:
+  selector: { app: cliente }
+  ports:
+    - port: 8080
+      targetPort: 8080

@@ -1,0 +1,11 @@
+# Local cluster: one node, with the ESB's NodePort published on localhost:8085.
+# Going through a NodePort (and not `kubectl port-forward`, which pins one pod)
+# keeps working while pods are killed and replaced.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: esb
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30085
+        hostPort: 8085

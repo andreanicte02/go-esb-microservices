@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESB en Kubernetes</title>
+  <meta name="description" content="Un ESB de microservicios en Go, desplegado en Kubernetes y probado en cada push: pedidos de punta a punta y pods eliminados a propósito.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="wrap hero">
+    <p class="eyebrow">Go · Kubernetes · kind</p>
+    <h1>ESB de microservicios en Kubernetes</h1>
+    <p class="lede">
+      Un bus de servicios escrito desde cero en Go, donde cliente, restaurante y repartidor se registran y se
+      comunican solo a través del bus. En cada push, GitHub Actions levanta un cluster de Kubernetes, despliega
+      todo, hace un pedido de punta a punta y <strong>elimina pods a propósito</strong> para ver si el sistema
+      se recupera solo. Esta página es el reporte de la última corrida.
+    </p>
+    <p class="links">
+      <a class="btn" href="https://github.com/andreanicte02/go-esb-microservices">Ver código</a>
+      <a class="btn ghost" id="runLink" href="https://github.com/andreanicte02/go-esb-microservices/actions">Ver la corrida en Actions</a>
+    </p>
+    <div class="pill" id="resumen"><span class="dot"></span><span id="resumenTexto">Cargando reporte…</span></div>
+  </header>
+
+  <main class="wrap">
+    <section class="tiles" aria-label="Resultados">
+      <div class="tile">
+        <p class="tlabel">Al eliminar el pod del ESB</p>
+        <p class="big" id="esbFallas">–</p>
+        <p class="sub" id="esbSub"></p>
+      </div>
+      <div class="tile">
+        <p class="tlabel">Al eliminar el pod del restaurante</p>
+        <p class="big" id="resFallas">–</p>
+        <p class="sub" id="resSub"></p>
+      </div>
+      <div class="tile">
+        <p class="tlabel">El ESB nuevo reaprendió las rutas en</p>
+        <p class="big" id="reaprende">–</p>
+        <p class="sub">sin reiniciar ningún servicio</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Cómo está desplegado</h2>
+      <svg class="diagram" viewBox="0 0 860 300" role="img" aria-label="Un cluster kind con el namespace esb: el ESB expuesto por NodePort 8085; cliente, restaurante y repartidor se registran en el ESB y reciben tráfico a través de él.">
+        <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <rect class="zone" x="140" y="10" width="710" height="280" rx="14"/>
+        <text class="zl" x="160" y="36">cluster kind · namespace esb</text>
+        <rect class="box ext" x="10" y="118" width="110" height="64" rx="10"/>
+        <text class="bt" x="65" y="146">curl / tests</text>
+        <text class="bs" x="65" y="166">localhost:8085</text>
+        <line class="edge" x1="122" y1="150" x2="198" y2="150" marker-end="url(#a)"/>
+        <rect class="box main" x="200" y="98" width="240" height="104" rx="10"/>
+        <text class="bt" x="320" y="128">esb</text>
+        <text class="bs" x="320" y="150">Service NodePort 30085</text>
+        <text class="bs" x="320" y="168">1 réplica · registro en memoria</text>
+        <text class="bs" x="320" y="186">/healthz · /readyz · /servicios</text>
+        <g class="svc">
+          <rect class="box" x="560" y="40" width="270" height="62" rx="10"/>
+          <text class="bt" x="695" y="66">cliente :8080</text>
+          <text class="bs" x="695" y="86">pide comida y consulta estados</text>
+          <rect class="box" x="560" y="119" width="270" height="62" rx="10"/>
+          <text class="bt" x="695" y="145">restaurante :8081</text>
+          <text class="bs" x="695" y="165">recibe y prepara pedidos</text>
+          <rect class="box" x="560" y="198" width="270" height="62" rx="10"/>
+          <text class="bt" x="695" y="224">repartidor :8082</text>
+          <text class="bs" x="695" y="244">entrega pedidos</text>
+        </g>
+        <path class="edge" d="M442 130 C 500 110, 500 75, 558 71" marker-end="url(#a)"/>
+        <path class="edge" d="M442 150 L 558 150" marker-end="url(#a)"/>
+        <path class="edge" d="M442 170 C 500 190, 500 225, 558 229" marker-end="url(#a)"/>
+        <path class="reg" d="M560 92 C 500 112, 480 120, 442 120" marker-end="url(#a)"/>
+        <path class="reg" d="M560 248 C 500 228, 480 186, 442 186" marker-end="url(#a)"/>
+        <text class="lg" x="500" y="282">— enruta peticiones   - - - registro cada 3 s</text>
+      </svg>
+    </section>
+
+    <section class="card">
+      <h2>La última corrida, paso a paso</h2>
+      <div id="pasos"></div>
+    </section>
+
+    <section class="card">
+      <h2>Qué hubo que cambiar para Kubernetes</h2>
+      <p class="intro">En Docker Compose (2021) todo funcionaba porque nada se movía. En Kubernetes los pods se reemplazan en cualquier momento, y eso sacó a la luz estos problemas:</p>
+      <div class="tablewrap">
+        <table class="changes">
+          <thead><tr><th>Problema en 2021</th><th>Qué pasaba</th><th>Solución</th></tr></thead>
+          <tbody>
+            <tr><td>Registro una sola vez al arrancar</td><td>Si el ESB se reiniciaba, olvidaba todas las rutas y nadie volvía a registrarse.</td><td>Cada servicio se vuelve a registrar cada 3 s (<code>comun/registro.go</code>); el ESB ignora los repetidos.</td></tr>
+            <tr><td>Arrancar antes que el ESB</td><td><code>resp.Body.Close()</code> sobre una respuesta <code>nil</code>: el servicio se caía y Compose lo reiniciaba.</td><td>Reintentos con espera creciente; el pod solo se marca listo (<code>/readyz</code>) cuando el ESB ya lo conoce.</td></tr>
+            <tr><td>Apagado inmediato</td><td>Al reemplazar un pod, las peticiones de los últimos segundos recibían <em>connection refused</em>.</td><td><em>Graceful shutdown</em>: deja de estar listo, sigue atendiendo 5 s y cierra limpio (<code>comun/servidor.go</code>).</td></tr>
+            <tr><td>El ESB nuevo no conoce rutas</td><td>Un pod recién creado responde 503 hasta que llegan los heartbeats.</td><td>Durante sus primeros 8 s, una petición a una ruta desconocida espera a que se registre.</td></tr>
+            <tr><td>Rutas recién publicadas</td><td><code>kube-proxy</code> tarda un instante en enrutar a un pod nuevo.</td><td>El ESB reintenta solo si la conexión fue rechazada: la petición nunca llegó, así que es seguro.</td></tr>
+            <tr><td>El ESB rearmaba los cuerpos</td><td><code>marcar_pedido</code> nunca recibía <code>idPedido</code>: siempre marcaba el pedido 0.</td><td>El ESB reenvía el cuerpo tal cual y devuelve el código real (502/503 en vez de un 200 vacío).</td></tr>
+            <tr><td>Registro sin candado</td><td>Peticiones concurrentes escribían el mismo slice: <em>data race</em>.</td><td><code>sync.RWMutex</code>, probado con <code>go test -race</code>.</td></tr>
+            <tr><td>Imágenes de casi 1 GB, solo amd64</td><td><code>golang:latest</code> con el compilador adentro y <code>GOARCH=amd64</code> fijo.</td><td>Build en dos etapas: imágenes distroless de 15 MB, sin root, para cualquier arquitectura.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="intro"><strong>Lo que sigue pendiente, a propósito:</strong> el ESB y los pedidos viven en memoria, así que cada uno corre con una sola réplica y el restaurante pierde sus pedidos al reiniciarse (la prueba lo verifica). Escalar a varias réplicas necesitaría guardar ese estado afuera, por ejemplo en Redis.</p>
+    </section>
+
+    <section class="card">
+      <h2>Rutas que el ESB conocía al final</h2>
+      <div class="tablewrap"><table id="registro"></table></div>
+    </section>
+
+    <section class="run">
+      <h2>Correrlo en tu máquina</h2>
+<pre><code><span class="c"># con Docker, kind y kubectl instalados</span>
+kind create cluster --config k8s/kind.yaml
+for s in esb cliente restaurante repartidor; do
+  docker build -t esb-microservices/$s:dev -f $( [ $s = esb ] &amp;&amp; echo esb || echo servicio-$s )/Dockerfile .
+  kind load docker-image esb-microservices/$s:dev --name esb
+done
+kubectl apply -k k8s
+python3 tests/e2e.py          <span class="c"># el mismo reporte que esta página</span>
+kind delete cluster --name esb</code></pre>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    Por <a href="https://github.com/andreanicte02">Andrea Nicte Vicente Campos</a> · Arquitectura de Software, USAC, 2021. Llevado a Kubernetes en 2026.
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

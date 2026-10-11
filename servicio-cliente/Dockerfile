@@ -1,19 +1,15 @@
-FROM golang:latest
-RUN apt-get update
-ENV GO111MODULE=on \
-    CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64
+# Build from the repository root so the shared comun/ module is available:
+#   docker build -f servicio-cliente/Dockerfile .
+FROM golang:1.24-alpine AS build
+WORKDIR /src
+COPY comun/ comun/
+COPY servicio-cliente/go.mod servicio-cliente/go.sum servicio-cliente/
+RUN cd servicio-cliente && go mod download
+COPY servicio-cliente/ servicio-cliente/
+RUN cd servicio-cliente && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/app .
 
-
-WORKDIR /build
-COPY go.mod .
-COPY go.sum .
-RUN go mod download
-
-COPY . .
-RUN go build -o main .
-WORKDIR /dist
-RUN cp /build/main .
+# No shell, no package manager, runs as a non-root user.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/app /app
 EXPOSE 8080
-CMD ["/dist/main"]
+ENTRYPOINT ["/app"]

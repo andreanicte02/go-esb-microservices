@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: esb-config
+  namespace: esb
+data:
+  # The bus is reached through its Service name, never a pod IP: pods come and go.
+  ESB_URL: http://esb:8085
+  # How often each service re-registers. It is also the worst-case time for the
+  # bus to relearn every route after its pod is replaced.
+  HEARTBEAT_SECONDS: "3"
+  # A new ESB pod waits up to this long for a route it doesn't know yet, instead of
+  # answering 503, while services re-register with it after it replaced the old one.
+  WARMUP_SECONDS: "8"
